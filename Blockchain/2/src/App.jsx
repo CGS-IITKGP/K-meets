@@ -8,6 +8,13 @@ function App() {
   const [chainId, setChainId] = useState(null);
   const [recipient, setRecipient] = useState('');
   const [amount, setAmount] = useState('');
+  const contractAddress = import.meta.env.VITE_CONTRACT_ADDRESS;
+  const infuraProvider = new ethers.JsonRpcProvider(import.meta.env.VITE_RPC);
+  const walletProvider = new ethers.BrowserProvider(window.ethereum);
+  const ABI=[{"inputs":[],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"sayHello","outputs":[{"internalType":"string","name":"","type":"string"}],"stateMutability":"pure","type":"function"},{"inputs":[{"internalType":"address payable","name":"_to","type":"address"},{"internalType":"uint256","name":"_amount","type":"uint256"}],"name":"sendEther","outputs":[],"stateMutability":"nonpayable","type":"function"},{"stateMutability":"payable","type":"receive"}];
+  
+  const getContractData = new ethers.Contract(contractAddress,ABI,infuraProvider);
+  const sendContractTx = new ethers.Contract(contractAddress,ABI,walletProvider);
 
   const networks = {
     baseSepolia: {
@@ -158,6 +165,69 @@ function App() {
     };
   }, [account]);
 
+  const getHelloWorld = async () => {
+    try {
+      const message = await getContractData.sayHello();
+      alert(`Contract says: ${message}`);
+    } catch (error) {
+      console.error('Error calling sayHello:', error);
+      alert('Failed to fetch message from contract');
+    }
+  };
+
+  const sendToContract = async () => {
+    if (!window.ethereum) return alert('MetaMask not found');
+
+    if (isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+      return alert('Invalid amount');
+    }
+
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const tx = await signer.sendTransaction({
+        to: contractAddress,
+        value: ethers.parseEther(amount),
+      });
+      console.log('Sent ETH to contract:', tx.hash);
+      await tx.wait();
+      console.log('Confirmed');
+      await getBalance(account);
+    } catch (err) {
+      console.error('Error sending ETH to contract:', err);
+    }
+  };
+
+  const sendFromContract = async () => {
+    if (!window.ethereum) return alert('MetaMask not found');
+
+    if (!ethers.isAddress(recipient)) {
+      return alert('Invalid recipient address');
+    }
+
+    if (isNaN(parseFloat(amount)) || parseFloat(amount) <= 0) {
+      return alert('Invalid amount');
+    }
+
+    try {
+      const provider = new ethers.BrowserProvider(window.ethereum);
+      const signer = await provider.getSigner();
+      const contractWithSigner = new ethers.Contract(contractAddress, ABI, signer);
+
+      const tx = await contractWithSigner.sendEther(
+        recipient,
+        ethers.parseEther(amount)
+      );
+
+      console.log('Contract sent ETH:', tx.hash);
+      await tx.wait();
+      console.log('Confirmed');
+      await getBalance(account);
+    } catch (err) {
+      console.error('Error sending ETH from contract:', err);
+    }
+  };
+
   return (
     <div>
       <button onClick={requestAccount}>{account ? 'Connected' : 'Connect Wallet'}</button>
@@ -182,6 +252,35 @@ function App() {
               onChange={(e) => setAmount(e.target.value)}
             />
             <button onClick={sendEth}>Send</button>
+          </div>
+          <button onClick={getHelloWorld}>Get Hello World</button>
+
+          <div>
+            <h3>Send ETH Directly to Contract</h3>
+            <input
+              type="text"
+              placeholder="Amount in ETH"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+            <button onClick={sendToContract}>Send to Contract</button>
+          </div>
+
+          <div>
+            <h3>Send ETH From Contract to Address</h3>
+            <input
+              type="text"
+              placeholder="Recipient Address"
+              value={recipient}
+              onChange={(e) => setRecipient(e.target.value)}
+            />
+            <input
+              type="text"
+              placeholder="Amount in ETH"
+              value={amount}
+              onChange={(e) => setAmount(e.target.value)}
+            />
+            <button onClick={sendFromContract}>Send From Contract</button>
           </div>
         </>
       )}
